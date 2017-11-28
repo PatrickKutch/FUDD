@@ -1,3 +1,22 @@
+##############################################################################
+#  Copyright (c) 2017 Patrick Kutch
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+# 
+#      http://www.apache.org/licenses/LICENSE-2.0
+# 
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+##############################################################################
+#    File Abstract: 
+#   Where the processing of the namespaces, files etc occurs
+#
+##############################################################################
 import os
 import logging
 import xml.dom.minidom
@@ -8,6 +27,7 @@ from Helpers import Log
 from Helpers import FileHandler
 from Data import MarvinGroupData
 from Data import MarvinData
+
 
 def getChildNodes(baseNode,childName):
     retList=[]
@@ -30,13 +50,13 @@ def ScaleValue(entry,scaleVal):
 def BoundValue(entry,min,max):
     retVal = False
     if None == min and None == max:
-        Log.getLogger().error("Invalid <Namespace> - Bound without Min or Max value specified.")
+        Log.getLogger().error("Invalid <Namespace> - BoundID without Min or Max value specified.")
         raise pickle.UnpicklingError()
 
     try:
         float(entry.Value)
     except:
-        Log.getLogger().info("Invalid <Namespace> - Bound tried to bound non numeric data point, ID="+entry.ID)
+        Log.getLogger().info("Invalid <Namespace> - BoundID tried to bound non numeric data point, ID="+entry.ID)
         return
 
 
@@ -47,7 +67,7 @@ def BoundValue(entry,min,max):
                 entry.Value = str(min)
                 retVal = True
         except:
-            Log.getLogger().error("Invalid <Namespace> - Min Bound value of " + min +" is invalid.")
+            Log.getLogger().error("Invalid <Namespace> - Min BoundID value of " + min +" is invalid.")
             raise pickle.UnpicklingError()
 
     if None != max:
@@ -57,7 +77,7 @@ def BoundValue(entry,min,max):
                 entry.Value = str(max)
                 retVal = True
         except:
-            Log.getLogger().error("Invalid <Namespace> - Max Bound value of " + max +" is invalid.")
+            Log.getLogger().error("Invalid <Namespace> - Max BoundID value of " + max +" is invalid.")
             raise pickle.UnpicklingError()
 
 
