@@ -1,0 +1,664 @@
+import os
+import logging
+import xml.dom.minidom
+import pickle
+from  pprint import pprint
+
+from Helpers import Log
+from Helpers import FileHandler
+from Data import MarvinGroupData
+from Data import MarvinData
+
+def getChildNodes(baseNode,childName):
+    retList=[]
+    for child in baseNode.childNodes:
+        if child.nodeName == childName:
+            retList.append(child)
+
+    return retList
+
+def ScaleValue(entry,scaleVal):
+    try:
+        fVal = float(entry.Value)
+    except:
+        Log.getLogger().info("Failed to scale ID: "  + entry.ID + " as it is not a numeric value.  Ignoring.")
+        return
+
+    fVal *= scaleVal
+    entry.Value = str(fVal)
+
+def BoundValue(entry,min,max):
+    retVal = False
+    if None == min and None == max:
+        Log.getLogger().error("Invalid <Namespace> - Bound without Min or Max value specified.")
+        raise pickle.UnpicklingError()
+
+    try:
+        float(entry.Value)
+    except:
+        Log.getLogger().info("Invalid <Namespace> - Bound tried to bound non numeric data point, ID="+entry.ID)
+        return
+
+
+    if None != min:
+        try:
+            min = float(min)
+            if float(entry.Value) < min:
+                entry.Value = str(min)
+                retVal = True
+        except:
+            Log.getLogger().error("Invalid <Namespace> - Min Bound value of " + min +" is invalid.")
+            raise pickle.UnpicklingError()
+
+    if None != max:
+        try:
+            max = float(max)
+            if float(entry.Value) > max:
+                entry.Value = str(max)
+                retVal = True
+        except:
+            Log.getLogger().error("Invalid <Namespace> - Max Bound value of " + max +" is invalid.")
+            raise pickle.UnpicklingError()
+
+
+    return retVal
+
+def mergeLists(srcList,listToMerge):
+    if len(srcList) == 0:
+        return list(listToMerge)
+
+    srcList.extend(listToMerge)
+
+    mergedList = sorted(srcList,key=lambda entry: entry.ArrivalTime)
+
+    return mergedList
+
+class FileHandler(object):
+    def __init__(self,baseNode):
+        self._sourceFile = baseNode.attributes["File"].nodeValue
+        Log.getLogger().info("Processing " + self._sourceFile)
+        with open(self._sourceFile,'r+b') as fp:
+            try:
+                self._entries = pickle.load(fp)
+                
+            except pickle.UnpicklingError as ex:
+                Log.getLogger().error("Invlid BIFF save file specified: " + self._sourceFile)
+                raise
+
+        self.getInsertTime(baseNode)
+        entryCount = self.createNamespaceMap()
+        Log.getLogger().info(self._sourceFile + " contains " + str(len(self._namespaceMap)) + " namespaces and " + str(entryCount) + " datapoints.")
+
+        self.HandleIndividualNamespaceProcessing(baseNode)
+        self.ProcessFileActions(baseNode)
+
+    def getInsertTime(self,baseNode):
+        insertTimeEntry = getChildNodes(baseNode,"InsertTime")
+        
+        if None == insertTimeEntry or 0 == len(insertTimeEntry):
+            self.insertTime = None
+
+        elif len(insertTimeEntry) > 1:
+            Log.getLogger().error("Only 1 insert time per source.")
+            raise pickle.UnpicklingError()
+
+        elif insertTimeEntry[0].firstChild.nodeValue == "Append":
+            self.insertTime = "Append"
+        else:
+            try:
+                self.insertTime = int(insertTimeEntry[0].firstChild.nodeValue)
+            except:
+                Log.getLogger().error("Invalid numeric value for <InsertTime>: " + insertTimeEntry[0].firstChild.nodeValue)
+                raise pickle.UnpicklingError()
+
+    def ProcessRemoveNamespaces(self,baseNode):
+        childNodes = getChildNodes(baseNode,"RemoveNamespace")
+        for node in childNodes:
+            namespace = node.firstChild.nodeValue
+            if namespace in self._namespaceMap:
+                del(self._namespaceMap[namespace])
+            else:
+                Log.getLogger().error("Invalid <RemoveNamespace> namespace: " + namespace + " does not exist")
+                raise pickle.UnpicklingError()
+
+    def ProcessFileActions(self,baseNode):
+        for childNode in baseNode.childNodes:
+            nodeName = childNode.nodeName
+            if nodeName == "#text" or nodeName == '#comment':
+                continue
+
+            action = nodeName.lower()
+
+            if action == "inserttime":
+                pass
+            elif action == "trim":
+                ## Handle <Trim>
+                trimEntry = getChildNodes(baseNode,"Trim")
+        
+                if None == trimEntry or 0 == len(trimEntry):
+                    trimStart = None #indicate natural insertion time
+                    trimEnd = None #indicate natural insertion time
+
+                elif len(trimEntry) > 1:
+                    Log.getLogger().error("Only 1 <Trim> per source.")
+                    raise pickle.UnpicklingError()
+                else:
+                    try:
+                        trimStart = int(getChildNodes(trimEntry[0],"StartTime")[0].firstChild.nodeValue)
+                        trimEnd = int(getChildNodes(trimEntry[0],"EndTime")[0].firstChild.nodeValue)
+                    except Exception as Ex:
+                        Log.getLogger().error("Invalid <Trim>.  Must have valid <StartTime> and <EndTime>.")
+                        raise pickle.UnpicklingError()
+
+                    for namespace in self._namespaceMap:
+                        self.TrimNamespace(namespace,trimStart,trimEnd)
+            
+            elif action == "span":
+                ## Handle <Span>
+                spanEntry = getChildNodes(baseNode,"Span")
+        
+                if None == spanEntry or 0 == len(spanEntry):
+                    spanTime = None #indicate natural insertion time
+
+                elif len(spanEntry) > 1:
+                    Log.getLogger().error("Only 1 <Span> per source.")
+                    raise pickle.UnpicklingError()
+
+                else:
+                    try:
+                        runTime = getChildNodes(spanEntry[0],"RunTime")
+                        if len(runTime) == 0:
+                            Log.getLogger().error("Invalid <Span>, must have <Runtime>: ")
+                            raise pickle.UnpicklingError()
+
+                        if len(runTime) > 1:
+                            Log.getLogger().error("Invalid <Span>, only 1 <Runtime>")
+                            raise pickle.UnpicklingError()
+
+                        spanTime = int(runTime[0].firstChild.nodeValue)
+                    except Exception as Ex:
+                        Log.getLogger().error("Invalid numeric value for <Span>: " + runTime[0].firstChild.nodeValue)
+                        raise pickle.UnpicklingError()
+
+                    for namespace in self._namespaceMap:
+                        self.SpanNamespaceWorker(namespace,spanTime)
+
+            elif action == "removenamespace":
+                pass
+            elif action == "namespace":
+                pass
+            else:
+                Log.getLogger().error("Invalid <Source> option <" + nodeName + ">")
+                raise pickle.UnpicklingError()
+        self.ProcessRemoveNamespaces(baseNode)
+                    
+
+    def HandleIndividualNamespaceProcessing(self,baseNode):
+        ## Handle <Namespace>
+        namespaces = getChildNodes(baseNode,"Namespace")
+        for namespace in namespaces:
+            if "Name" in namespace.attributes:
+                name = namespace.attributes["Name"].nodeValue
+                self.ProcessNamespaceManipulation(namespace,name)
+
+            else:
+                Log.getLogger().error("Invalid <Namespace> - requires Name attribute.")
+                raise pickle.UnpicklingError()
+
+    def existsID(self,namespace,ID):
+        ID = ID.lower()
+        for entry in self._namespaceMap[namespace]:
+            if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                for subEntry in entry._DataList:
+                    if subEntry.ID.lower() == ID:
+                        return True
+            elif entry.ID.lower() == ID:
+                return True
+
+        return False
+
+    def createNamespaceMap(self):
+        self._namespaceMap = {}
+        entryCount = 0
+
+        startTime = None
+
+        for entry in self._entries:
+            namespace = entry.Namespace
+            if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                namespace=entry._DataList[0].Namespace
+                entryCount += len(entry._DataList)
+
+            else:
+                entryCount += 1
+
+            if not namespace in self._namespaceMap:
+                self._namespaceMap[namespace] = []
+                if None == startTime:
+                    startTime = entry.ArrivalTime
+                    if self.insertTime != "Append" and self.insertTime != None:
+                        startTime -= self.insertTime
+
+
+            entry.ArrivalTime -= startTime #reset arrival time based upon 1st packet
+            self._namespaceMap[namespace].append(entry)
+            
+        return entryCount
+
+    def RenameNamespace(self,origName,newName):
+        if newName in self._namespaceMap:
+            Log.getLogger().error("<Namespace> rename failed - namespace " + newName + "already exists")
+            raise pickle.UnpicklingError()
+
+        for entry in self._namespaceMap[origName]:
+            if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                for subEntry in entry._DataList:
+                    subEntry.Namespace = newName
+            else:
+                entry.Namespace = newName
+
+        self._namespaceMap[newName] = self._namespaceMap[origName]
+        del self._namespaceMap[origName]
+
+    def DuplicateNamespace(self,origName,newName):
+        if newName in self._namespaceMap:
+            Log.getLogger().error("<Namespace> duplicate failed - namespace " + newName + "already exists")
+            raise pickle.UnpicklingError()
+
+        for entry in self._namespaceMap[origName]:
+            if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                for subEntry in entry._DataList:
+                    subEntry.Namespace = newName
+            else:
+                entry.Namespace = newName
+
+        self._namespaceMap[newName] = self._namespaceMap[origName]
+
+    def DeleteDatapoint(self,namespace,baseNode):
+        if not "ID" in baseNode.attributes:
+            Log.getLogger().error("<Namespace> DeleteID failed - no ID attribute.")
+            raise pickle.UnpicklingError()
+
+        id = baseNode.attributes["ID"].nodeValue
+
+        newList = []
+        removedCount = 0
+
+        for entry in self._namespaceMap[namespace]:
+            if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                subList=[]
+                for subEntry in entry._DataList:
+                    if not subEntry.ID.upper() == id.upper():
+                        subList.append(subEntry)
+                    else:
+                        removedCount += 1
+
+                if len(subList) != len(entry._DataList):
+                    entry._DataList = subList
+
+                newList.append(entry)
+
+            else:
+                if not entry.ID.upper() == id.upper():
+                    newList.append(entry)
+                else:
+                    removedCount += 1
+
+        if removedCount > 0:
+            self._namespaceMap[namespace] = newList
+
+        else:
+            Log.getLogger().error("<Namespace> Delete ID failed - no ID " + id + " not found.")
+            raise pickle.UnpicklingError()
+
+
+        Log.getLogger().info("Removed " + str(removedCount) + " instances of ID: " + id)
+        return removedCount
+
+    def TrimNamespace(self,namespace,trimStart,trimEnd):
+        if trimStart < 0:
+            Log.getLogger().error("Invalid <Namespace> Trim - StartTime < 0.")
+            raise pickle.UnpicklingError()
+
+        if trimEnd < 0:
+            Log.getLogger().error("Invalid <Namespace> Trim - EndTime < 0.")
+            raise pickle.UnpicklingError()
+
+        if trimEnd < trimStart:
+            Log.getLogger().error("Invalid <Namespace> Trim - EndTime < StartTime.")
+            raise pickle.UnpicklingError()
+
+        newList=list(self._namespaceMap[namespace])
+        if self.insertTime == None or self.insertTime == 'Append':
+            offset = 0 # need to account for 'insert time' 
+        else:
+            offset = self.insertTime
+
+        index = 0
+        if trimStart > 0:
+            for entry in self._namespaceMap[namespace]:
+                if entry.ArrivalTime - offset <= trimStart:
+                    index +=1
+                else:
+                    break
+
+        startIndex = index
+        if trimEnd > newList[-1].ArrivalTime:
+            Log.getLogger().info("<Namespace> Trim - EndTime > stream.  Ignoring.")
+
+        else:
+            index = 0
+            for entry in newList:
+                if entry.ArrivalTime - offset <= trimEnd:
+                    index +=1
+                else:
+                    break
+
+        endIndex = index
+        self._namespaceMap[namespace] = self._namespaceMap[namespace][startIndex:endIndex]
+
+
+    def MergeNamespace(self,additionalNamespace,basenamespace):
+        if not basenamespace in self._namespaceMap:
+            Log.getLogger().error("<Namespace> MergeWith failed - unknown namespace:" + basenamespace)
+            raise pickle.UnpicklingError()
+
+        base = self._namespaceMap[basenamespace]
+        del self._namespaceMap[basenamespace]
+        self.DuplicateNamespace(additionalNamespace,basenamespace)
+        other = self._namespaceMap[basenamespace]
+    
+        merged = mergeLists(base,other)
+        
+        self._namespaceMap[basenamespace] = merged
+
+    def ScaleID(self,namespace,node):
+        if not "Factor" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - Scale - no Factor specified.")
+            raise pickle.UnpicklingError()
+
+        if not "ID" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - Scale - no ID specified.")
+            raise pickle.UnpicklingError()
+
+        idLow = node.attributes["ID"].nodeValue.lower()
+
+        if not self.existsID(namespace,idLow):
+            Log.getLogger().error("Invalid <Namespace> - Scale - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
+            raise pickle.UnpicklingError()
+        
+        try:
+            factorVal = float(node.attributes["Factor"].nodeValue)
+        except Exception as Ex:
+            Log.getLogger().error("Invalid <Namespace> - Scale - invalid value: " + node.attributes["Factor"])
+            raise pickle.UnpicklingError()
+
+        scaleCount=0
+
+        for entryObj in self._namespaceMap[namespace]:
+            if isinstance(entryObj,MarvinGroupData.MarvinDataGroup):
+                for entry in entryObj._DataList:
+                    if entry.ID.lower() == idLow:
+                        ScaleValue(entry,factorVal)
+                        scaleCount += 1
+
+            elif entryObj.ID.lower() == idLow:
+                ScaleValue(entryObj,factorVal)
+                scaleCount += 1
+
+        return scaleCount
+
+
+    def BoundID(self,namespace,node):
+        if not "ID" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - Bound - no ID specified.")
+            raise pickle.UnpicklingError()
+
+        idLow = node.attributes["ID"].nodeValue.lower()
+
+        if not self.existsID(namespace,idLow):
+            Log.getLogger().error("Invalid <Namespace> - Bound - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
+            raise pickle.UnpicklingError()
+        
+        max=None
+        min=None
+
+        if "Max" in node.attributes:
+            max = node.attributes['Max'].nodeValue
+
+        if "Min" in node.attributes:
+            min = node.attributes['Min'].nodeValue
+
+
+        boundCount=0
+
+        for entryObj in self._namespaceMap[namespace]:
+            if isinstance(entryObj,MarvinGroupData.MarvinDataGroup):
+                for entry in entryObj._DataList:
+                    if entry.ID.lower() == idLow:
+                        if BoundValue(entry,min,max):
+                            boundCount += 1
+
+            elif entryObj.ID.lower() == idLow:
+                if BoundValue(entryObj,min,max):
+                    boundCount += 1
+
+        return boundCount
+
+    def InsertDatapoint(self,namespace,node):
+        if not "ID" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - Insert - no ID specified.")
+            raise pickle.UnpicklingError()
+
+        if not "Value" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - Insert - no Value specified.")
+            raise pickle.UnpicklingError()
+
+        if not "Time" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - Insert - no Time specified.")
+            raise pickle.UnpicklingError()
+
+        try:
+            insertTime = int(node.attributes['Time'].nodeValue)
+        except:
+            Log.getLogger().error("Invalid <Namespace> - Insert - invalid Time specified:" + node.attributes['Time'].nodeValue)
+            raise pickle.UnpicklingError()
+
+        newObj = MarvinData.MarvinData(namespace,node.attributes['ID'].nodeValue,node.attributes['Value'].nodeValue,insertTime,'1.0',False)
+
+        index = 0
+        for entry in self._namespaceMap[namespace]:
+            if insertTime <= entry.ArrivalTime:
+                break
+            index += 1
+
+        self._namespaceMap[namespace].insert(index,newObj)
+        
+        return index    
+
+    def InitializeAll(self,namespace,node):
+        if not "Value" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - InitAll - no Value specified.")
+            raise pickle.UnpicklingError()
+
+        if not "Time" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - InitAll - no Time specified.")
+            raise pickle.UnpicklingError()
+
+        try:
+            insertTime = int(node.attributes['Time'].nodeValue)
+        except:
+            Log.getLogger().error("Invalid <Namespace> - InitAll - invalid Time specified:" + node.attributes['Time'].nodeValue)
+            raise pickle.UnpicklingError()
+
+        uniqueMap={}
+        Value = node.attributes['Value'].nodeValue
+
+        index = 0
+        for entry in self._namespaceMap[namespace]:
+            if insertTime <= entry.ArrivalTime:
+                break
+            index += 1
+        
+        startList = list(self._namespaceMap[namespace]) # dup list for processing
+
+        initCount = 0
+
+        for entry in startList:
+            if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                for subEntry in entry._DataList:
+                    if not subEntry.ID in uniqueMap:
+                        uniqueMap[subEntry.ID] = subEntry.ID # just keep track of them
+                        newObj = MarvinData.MarvinData(namespace,subEntry.ID,Value,insertTime,'1.0',False)
+                        self._namespaceMap[namespace].insert(index,newObj)
+                        initCount += 1
+
+            elif not entry.ID in uniqueMap:
+                uniqueMap[entry.ID] = entry.ID # just keep track of them
+                newObj = MarvinData.MarvinData(namespace,entry.ID,Value,insertTime,'1.0',False)
+                self._namespaceMap[namespace].insert(index,newObj)
+                initCount += 1
+
+        return initCount
+                
+    def RenameID(self,namespace,node):
+        if not "ID" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - RenameID - no ID specified.")
+            raise pickle.UnpicklingError()
+
+        if not "NewID" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - RenameID - no NewID specified.")
+            raise pickle.UnpicklingError()
+
+        ID = node.attributes["ID"].nodeValue
+        NewID = node.attributes["NewID"].nodeValue
+
+        if not self.existsID(namespace,ID):
+            Log.getLogger().error("Invalid <Namespace> - RenameID - ID: " + ID + " does not exist.")
+            raise pickle.UnpicklingError()
+
+        if self.existsID(namespace,NewID):
+            Log.getLogger().error("Invalid <Namespace> - RenameID - ID: " + NewID + " already exists.")
+            raise pickle.UnpicklingError()
+
+        ID = ID.lower()
+
+        changedCount = 0
+        for entry in self._namespaceMap[namespace]:
+            if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                for subEntry in entry._DataList:
+                    if ID == subEntry.ID.lower():
+                        subEntry.ID = NewID
+                        changedCount += 1
+
+            elif ID == entry.ID.lower():
+                entry.ID = NewID
+                changedCount += 1
+
+        return changedCount
+
+    def SpanNamespaceWorker(self,namespace,runtime):
+        firstTime = self._namespaceMap[namespace][0].ArrivalTime
+        lastTime = self._namespaceMap[namespace][-1].ArrivalTime
+        delta = lastTime - firstTime
+        factor = runtime/delta
+
+        for entry in self._namespaceMap[namespace]:
+            entry.ArrivalTime = int(float(entry.ArrivalTime) * factor)
+
+    def SpanNamespace(self,namespace,node):
+        children = getChildNodes(node,"RunTime")
+        if len(children) == 0:
+            Log.getLogger().error("Invalid <Namespace> - SpanNS - RunTime not specified.")
+            raise pickle.UnpicklingError()
+        
+        if len(children) > 1:
+            Log.getLogger().error("Invalid <Namespace> - SpanNS - only 1 RunTime allowed.")
+            raise pickle.UnpicklingError()
+
+        try:
+            runTime = int(children[0].firstChild.nodeValue)
+        except:
+            Log.getLogger().error("Invalid <Namespace> - SpanNS RunTime value: " + children[0].firstChild.nodeValue)
+            
+        self.SpanNamespaceWorker(namespace,runTime)
+
+        return runTime
+  
+    def ProcessNamespaceManipulation(self,baseNode,namespace):
+        if not namespace in self._namespaceMap:
+            Log.getLogger().error("Invalid <Namespace> - Name: " + namespace + " does not exist.")
+            raise pickle.UnpicklingError()
+
+        Log.getLogger().info("Processing Namespace: " + namespace)
+
+        for childNode in baseNode.childNodes:
+            nodeName = childNode.nodeName
+            if nodeName == "#text" or nodeName == '#comment':
+                continue
+            
+            if nodeName == "RenameNS":
+                self.RenameNamespace(namespace,childNode.firstChild.nodeValue)
+
+            elif nodeName == "DuplicateNS":
+                self.DuplicateNamespace(namespace,childNode.firstChild.nodeValue)
+
+            elif nodeName == "DeleteID":
+                self.DeleteDatapoint(namespace,childNode)
+
+            elif nodeName == "MergeWithNS":
+                self.MergeNamespace(namespace,childNode.firstChild.nodeValue)
+                
+            elif nodeName == "TrimNS":
+                trimEntry = getChildNodes(baseNode,"TrimNS")
+        
+                if len(trimEntry) > 1:
+                    Log.getLogger().error("Only 1 <TrimNS> per Namespace.")
+                    raise pickle.UnpicklingError()
+
+                try:
+                    trimStart = int(getChildNodes(trimEntry[0],"StartTime")[0].firstChild.nodeValue)
+                    trimEnd = int(getChildNodes(trimEntry[0],"EndTime")[0].firstChild.nodeValue)
+                except:
+                    Log.getLogger().error("Invalid Namespace <TrimNS>.")
+                    raise pickle.UnpicklingError()
+
+                self.TrimNamespace(namespace,trimStart,trimEnd)
+
+            elif nodeName == "ScaleID":
+                self.ScaleID(namespace,childNode)
+            
+            elif nodeName == "BoundID":
+                self.BoundID(namespace,childNode)
+
+            elif nodeName == "InsertID":
+                self.InsertDatapoint(namespace,childNode)
+        
+            elif nodeName == "InitAllID":
+                self.InitializeAll(namespace,childNode)
+                
+            elif nodeName == "RenameID":
+                self.RenameID(namespace,childNode)
+
+            elif nodeName == "SpanNS":
+                self.SpanNamespace(namespace,childNode)
+
+            else:
+                Log.getLogger().error("Invalid Namespace Option <" + nodeName +">.")
+                raise pickle.UnpicklingError()
+
+    def createMergedList(self,offsetTime=0):
+        resultList=None
+        for namespace in self._namespaceMap:
+            if None == resultList:
+                resultList = self._namespaceMap[namespace]
+            else:
+                resultList = mergeLists(resultList,self._namespaceMap[namespace])
+
+        if offsetTime > 0:
+            for entry in resultList:
+                entry.ArrivalTime += offsetTime
+
+        return resultList
+
+
