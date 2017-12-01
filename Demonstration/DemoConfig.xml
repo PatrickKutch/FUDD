@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+##############################################################################
+#  Copyright (c) 2017 Patrick Kutch
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+# 
+#      http://www.apache.org/licenses/LICENSE-2.0
+# 
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+##############################################################################
+#    File Abstract: 
+#    Examle file.  Uncomment sections for different capability exaples.
+#
+##############################################################################
+-->
+<Fudd>
+	<MyComment> ## Simple merge ## </MyComment>
+	<!-- Remove comment block to show demo
+    <Source File="Demonstration\A SaveFile.biff"/>
+    <Source File="Demonstration\AnotherSaveFile.biff"/>
+    <Source File="Demonstration\YetAnotherSaveFile.biff"/>
+	-->
+
+	<MyComment> ## Merge at specific times ## </MyComment>
+	<!-- Remove comment block to show demo
+    <Source File="Demonstration\A SaveFile.biff"/>
+    <Source File="Demonstration\AnotherSaveFile.biff">
+		<InsertTime>5000</InsertTime> #Insert this starting at 5 secs
+	</Source>
+    <Source File="Demonstration\YetAnotherSaveFile.biff">
+		<InsertTime>Append</InsertTime> #Insert this @ end. If more than 1 specified are done in order
+	</Source>
+	-->
+
+	<MyComment> ## Merge at specific times ## </MyComment>
+	<!-- Remove comment block to show demo
+    <Source File="Demonstration\A SaveFile.biff"/>
+    <Source File="Demonstration\AnotherSaveFile.biff">
+		<InsertTime>5000</InsertTime> #Insert this starting at 5 secs
+	</Source>
+    <Source File="Demonstration\YetAnotherSaveFile.biff">
+		<InsertTime>Append</InsertTime> #Insert this @ end. If more than 1 specified are done in order
+	</Source>
+	-->	
+
+	<MyComment> ## Trim and Span File example ## </MyComment>
+	<!-- Remove comment block to show demo
+    <Source File="Demonstration\YetAnotherSaveFile.biff">
+        <Trim> ## removes everything before 1 sec and after 6, results in 5 sec long stream
+            <StartTime>1000</StartTime>
+            <EndTime>6000</EndTime>
+        </Trim>	
+	</Source>
+    <Source File="Demonstration\A SaveFile.biff">
+        <Span>
+            <RunTime>5000</RunTime> #Make all items in this file playback in 5 secs, so could be faster or slower than original
+        </Span>	
+	</Source>
+	-->
+
+	<MyComment> ## Duplicate and delete Namespaces ## </MyComment>
+	<!-- Remove comment block to show demo
+    <Source File="Demonstration\A SaveFile.biff">
+        <Namespace Name="DemoNamespace">
+            <DuplicateNS>DupedNS</DuplicateNS>
+        </Namespace>
+        <Namespace Name="DupedNS">  ## have this Namespace so can manipualte it independently, like another dup
+            <DuplicateNS>DupedNS.2</DuplicateNS>
+        </Namespace>
+		
+        <RemoveNamespace>DemoNamespace</RemoveNamespace> ## can nuke the original, done with it.  Must do this after you dup
+	</Source>
+	-->
+
+	<MyComment> ## Rename a namespace ## </MyComment>
+	<!-- Remove comment block to show demo
+    <Source File="Demonstration\A SaveFile.biff"/>
+    <Source File="Demonstration\A SaveFile.biff"> ## add same file, but this time rename the space in it (only 1 NS in this file)
+        <Namespace Name="DemoNamespace">
+            <RenameNS>RenamedNS</RenameNS>
+        </Namespace>
+	</Source>
+	-->
+
+	<MyComment> ## ID Manipulation ## </MyComment>
+	<!-- Remove comment block to show demo
+    <Source File="Demonstration\A SaveFile.biff">
+        <Namespace Name="DemoNamespace">
+            <ScaleID ID="BX" Factor="1.5"/> # Scale an individual ID, in this case + 50%
+            <BoundID ID="cpu" Max="99.2" Min="22.1"/>
+            <InsertID ID="MyData" Value="Hi Mom" Time="1000"/>
+            <InsertID ID="MyData" Value="Bye Mom" Time="4000"/>
+            <InitAllID Value="0" Time="10"/>  # give EVERY ID a value of '0' and insert at time of 10ms
+			<RenameID ID="3to10" NewID="3-to-10"/> #fix naming error when collected
+		</Namespace>
+	</Source>
+	-->
+	<MyComment> ## Namespace Manipulation ## </MyComment>
+	<!-- Remove comment block to show demo
+	<Source File="Demonstration\AnotherSaveFile.biff">
+		<Namespace Name="vnf13">
+			<MergeWithNS>vnf16</MergeWithNS> #combines 2 namespaces into vnf13, replaces old vnf13 with new one.  vnf16 still remains
+		</Namespace>
+        <Namespace Name="vnf15">
+            <SpanNS>
+                <RunTime>20000</RunTime> #Lengthen or shorten runtime (in this case shortenby .5 secs)
+            </SpanNS>
+            <TrimNS>
+                <StartTime>1000</StartTime> # prev Span makes this NS 20 secs long.  Now let's only keep from 1 sec to 16 secs of it
+                <EndTime>16000</EndTime>
+            </TrimNS>
+        </Namespace>		
+	</Source>
+	-->
+</Fudd>

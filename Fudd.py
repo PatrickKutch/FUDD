@@ -19,6 +19,7 @@
 ##############################################################################
 import argparse
 import os
+import sys
 import logging
 import pickle
 import xml.dom.minidom
@@ -80,10 +81,15 @@ def ReadConfigFile(fileName,outfile):
                 resultList = FileHandler.mergeLists(resultList,fHandler.createMergedList(lastTime + 1))
                 lastTime = resultList[-1].ArrivalTime
             
-        with open(outfile,'w+b') as fp:
-           pickle.dump(resultList, fp, pickle.DEFAULT_PROTOCOL)
+        try:
+            with open(outfile,'w+b') as fp:
+               pickle.dump(resultList, fp, pickle.DEFAULT_PROTOCOL)
 
-        print("New file [" + outfile + "] created with " + str(len(resultList)) + " entries.")
+            print("New file [" + outfile + "] created with " + str(len(resultList)) + " entries.")
+        except Exception as ex:
+            print(str(ex))
+            return False
+
 
 
     except pickle.UnpicklingError:
@@ -101,6 +107,10 @@ def main():
 
 def HandleCommandlineArguments():
     print("FUDD - BIFF Save File Editor Version " + VersionMgr.ReadVer())
+
+    if sys.version_info < (3, 3):
+        print("---- Error: Required Python 3.3 or greater ---")
+        return False
     
     parser = argparse.ArgumentParser(description='FUDD the fearful')
 

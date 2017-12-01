@@ -29,6 +29,7 @@ class MarvinData(object):
             self.ArrivalTime = Time.GetCurrMS()
         else:
             self.ArrivalTime = ElapsedTime
+        self.Namespace = Namespace
         #self.Namespace = Configuration.get().HandleBITWNamespace(Namespace) # if Bump in the Wire, change NS
 
         self.ID = ID
