@@ -21,10 +21,10 @@ import os
 import logging
 import xml.dom.minidom
 import pickle
+import copy
 from  pprint import pprint
 
 from Helpers import Log
-from Helpers import FileHandler
 from Data import MarvinGroupData
 from Data import MarvinData
 
@@ -88,6 +88,9 @@ def BoundValue(entry,min,max):
 
 ## helper routine, combines list 1 and list 2, sorted by Arrival Time
 def mergeLists(srcList,listToMerge):
+    if srcList == None:
+        return list(listToMerge)
+
     if len(srcList) == 0:
         return list(listToMerge)
 
@@ -297,14 +300,14 @@ class FileHandler(object):
             Log.getLogger().error("<Namespace> duplicate failed - namespace " + newName + "already exists")
             raise pickle.UnpicklingError()
 
-        for entry in self._namespaceMap[origName]:
+        self._namespaceMap[newName] = copy.deepcopy(self._namespaceMap[origName])
+        for entry in self._namespaceMap[newName]:
             if isinstance(entry,MarvinGroupData.MarvinDataGroup):
                 for subEntry in entry._DataList:
                     subEntry.Namespace = newName
             else:
                 entry.Namespace = newName
 
-        self._namespaceMap[newName] = self._namespaceMap[origName]
 
     # delete a datapoint from a namespace
     def DeleteDatapoint(self,namespace,baseNode):
@@ -692,9 +695,6 @@ class FileHandler(object):
     def createMergedList(self,offsetTime=0):
         resultList=None
         for namespace in self._namespaceMap:
-            if None == resultList:
-                resultList = self._namespaceMap[namespace]
-            else:
                 resultList = mergeLists(resultList,self._namespaceMap[namespace])
 
         if offsetTime > 0:
