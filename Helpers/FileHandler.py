@@ -28,18 +28,20 @@ from Helpers import FileHandler
 from Data import MarvinGroupData
 from Data import MarvinData
 
-
+# Just a helper in parsing XML, sends just the child nodes that match
 def getChildNodes(baseNode,childName):
     retList=[]
     for child in baseNode.childNodes:
-        if child.nodeName == childName:
+        if child.nodeName == childName:  # could make this case independent if wanted to
             retList.append(child)
 
     return retList
 
+# Will scale a given value - must be numeric
 def ScaleValue(entry,scaleVal):
     try:
         fVal = float(entry.Value)
+        scaleVal = float(scaleVal)
     except:
         Log.getLogger().info("Failed to scale ID: "  + entry.ID + " as it is not a numeric value.  Ignoring.")
         return
@@ -47,6 +49,7 @@ def ScaleValue(entry,scaleVal):
     fVal *= scaleVal
     entry.Value = str(fVal)
 
+# if the value is outside of the min/max passed, set it to the min/max value
 def BoundValue(entry,min,max):
     retVal = False
     if None == min and None == max:
@@ -83,6 +86,7 @@ def BoundValue(entry,min,max):
 
     return retVal
 
+## helper routine, combines list 1 and list 2, sorted by Arrival Time
 def mergeLists(srcList,listToMerge):
     if len(srcList) == 0:
         return list(listToMerge)
@@ -93,6 +97,7 @@ def mergeLists(srcList,listToMerge):
 
     return mergedList
 
+## my worker class that does all the real work
 class FileHandler(object):
     def __init__(self,baseNode):
         self._sourceFile = baseNode.attributes["File"].nodeValue
@@ -112,6 +117,7 @@ class FileHandler(object):
         self.HandleIndividualNamespaceProcessing(baseNode)
         self.ProcessFileActions(baseNode)
 
+    # reads time to insert from config time, could be 'Append' or an actual value, or doesn't exist
     def getInsertTime(self,baseNode):
         insertTimeEntry = getChildNodes(baseNode,"InsertTime")
         
@@ -131,6 +137,7 @@ class FileHandler(object):
                 Log.getLogger().error("Invalid numeric value for <InsertTime>: " + insertTimeEntry[0].firstChild.nodeValue)
                 raise pickle.UnpicklingError()
 
+    ## nukes namespace from stream
     def ProcessRemoveNamespaces(self,baseNode):
         childNodes = getChildNodes(baseNode,"RemoveNamespace")
         for node in childNodes:
@@ -141,6 +148,7 @@ class FileHandler(object):
                 Log.getLogger().error("Invalid <RemoveNamespace> namespace: " + namespace + " does not exist")
                 raise pickle.UnpicklingError()
 
+    ## goes through the valid actions to perform on entire file, like when to insert, trim, etc.
     def ProcessFileActions(self,baseNode):
         for childNode in baseNode.childNodes:
             nodeName = childNode.nodeName
@@ -225,6 +233,7 @@ class FileHandler(object):
                 Log.getLogger().error("Invalid <Namespace> - requires Name attribute.")
                 raise pickle.UnpicklingError()
 
+    # checks to see if an ID exists in a namespace
     def existsID(self,namespace,ID):
         ID = ID.lower()
         for entry in self._namespaceMap[namespace]:
@@ -237,6 +246,7 @@ class FileHandler(object):
 
         return False
 
+    # creates an array of data entries for every namespace in the file
     def createNamespaceMap(self):
         self._namespaceMap = {}
         entryCount = 0
@@ -265,12 +275,13 @@ class FileHandler(object):
             
         return entryCount
 
+    # renames a namespace
     def RenameNamespace(self,origName,newName):
         if newName in self._namespaceMap:
             Log.getLogger().error("<Namespace> rename failed - namespace " + newName + "already exists")
             raise pickle.UnpicklingError()
 
-        for entry in self._namespaceMap[origName]:
+        for entry in self._namespaceMap[origName]:  # go through each entry and update namespace
             if isinstance(entry,MarvinGroupData.MarvinDataGroup):
                 for subEntry in entry._DataList:
                     subEntry.Namespace = newName
@@ -280,6 +291,7 @@ class FileHandler(object):
         self._namespaceMap[newName] = self._namespaceMap[origName]
         del self._namespaceMap[origName]
 
+    # makes a copy of a given namespace, with another name - is a copy not a rename
     def DuplicateNamespace(self,origName,newName):
         if newName in self._namespaceMap:
             Log.getLogger().error("<Namespace> duplicate failed - namespace " + newName + "already exists")
@@ -294,6 +306,7 @@ class FileHandler(object):
 
         self._namespaceMap[newName] = self._namespaceMap[origName]
 
+    # delete a datapoint from a namespace
     def DeleteDatapoint(self,namespace,baseNode):
         if not "ID" in baseNode.attributes:
             Log.getLogger().error("<Namespace> DeleteID failed - no ID attribute.")
@@ -335,6 +348,7 @@ class FileHandler(object):
         Log.getLogger().info("Removed " + str(removedCount) + " instances of ID: " + id)
         return removedCount
 
+    # trims the namespace to a start and stop time
     def TrimNamespace(self,namespace,trimStart,trimEnd):
         if trimStart < 0:
             Log.getLogger().error("Invalid <Namespace> Trim - StartTime < 0.")
@@ -378,6 +392,7 @@ class FileHandler(object):
         self._namespaceMap[namespace] = self._namespaceMap[namespace][startIndex:endIndex]
 
 
+    # takes a 2nd namespace, renames it to the 1st namespace and returns one list with both contents
     def MergeNamespace(self,additionalNamespace,basenamespace):
         if not basenamespace in self._namespaceMap:
             Log.getLogger().error("<Namespace> MergeWith failed - unknown namespace:" + basenamespace)
@@ -392,6 +407,7 @@ class FileHandler(object):
         
         self._namespaceMap[basenamespace] = merged
 
+    # worker fucntion to Scale an ID within a namespace
     def ScaleID(self,namespace,node):
         if not "Factor" in node.attributes:
             Log.getLogger().error("Invalid <Namespace> - Scale - no Factor specified.")
@@ -428,7 +444,7 @@ class FileHandler(object):
 
         return scaleCount
 
-
+    # worker to bound and ID in a namespace
     def BoundID(self,namespace,node):
         if not "ID" in node.attributes:
             Log.getLogger().error("Invalid <Namespace> - Bound - no ID specified.")
@@ -449,7 +465,6 @@ class FileHandler(object):
         if "Min" in node.attributes:
             min = node.attributes['Min'].nodeValue
 
-
         boundCount=0
 
         for entryObj in self._namespaceMap[namespace]:
@@ -465,6 +480,7 @@ class FileHandler(object):
 
         return boundCount
 
+    # insert a datapoint into a namesapce
     def InsertDatapoint(self,namespace,node):
         if not "ID" in node.attributes:
             Log.getLogger().error("Invalid <Namespace> - Insert - no ID specified.")
@@ -496,6 +512,7 @@ class FileHandler(object):
         
         return index    
 
+    # finds all unique IDs in a namesapce, and then at beginning of the namespace inserts a defined value
     def InitializeAll(self,namespace,node):
         if not "Value" in node.attributes:
             Log.getLogger().error("Invalid <Namespace> - InitAll - no Value specified.")
@@ -541,6 +558,7 @@ class FileHandler(object):
 
         return initCount
                 
+    # rename an ID within a namespace
     def RenameID(self,namespace,node):
         if not "ID" in node.attributes:
             Log.getLogger().error("Invalid <Namespace> - RenameID - no ID specified.")
@@ -577,6 +595,7 @@ class FileHandler(object):
 
         return changedCount
 
+    # stretches or shrinks runtime for a namespace
     def SpanNamespaceWorker(self,namespace,runtime):
         firstTime = self._namespaceMap[namespace][0].ArrivalTime
         lastTime = self._namespaceMap[namespace][-1].ArrivalTime
@@ -586,6 +605,7 @@ class FileHandler(object):
         for entry in self._namespaceMap[namespace]:
             entry.ArrivalTime = int(float(entry.ArrivalTime) * factor)
 
+    # stretches or shrinks runtime for a namespace
     def SpanNamespace(self,namespace,node):
         children = getChildNodes(node,"RunTime")
         if len(children) == 0:
@@ -604,7 +624,8 @@ class FileHandler(object):
         self.SpanNamespaceWorker(namespace,runTime)
 
         return runTime
-  
+
+    # gets all the differnt options specified for a given namespace internal manipulation and performs them  
     def ProcessNamespaceManipulation(self,baseNode,namespace):
         if not namespace in self._namespaceMap:
             Log.getLogger().error("Invalid <Namespace> - Name: " + namespace + " does not exist.")
@@ -667,6 +688,7 @@ class FileHandler(object):
                 Log.getLogger().error("Invalid Namespace Option <" + nodeName +">.")
                 raise pickle.UnpicklingError()
 
+    # retuns the final list of all the namespaces for this file after all the manipulations
     def createMergedList(self,offsetTime=0):
         resultList=None
         for namespace in self._namespaceMap:

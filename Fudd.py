@@ -86,7 +86,6 @@ def ReadConfigFile(fileName,outfile):
         print("New file [" + outfile + "] created with " + str(len(resultList)) + " entries.")
 
 
-
     except pickle.UnpicklingError:
         return False
 
