@@ -90,6 +90,7 @@
 	-->
 
 	<MyComment> ## ID Manipulation ## </MyComment>
+    <!-- Remove comment block to show demo
     <Source File="Demonstration\A SaveFile.biff">
         <Namespace Name="DemoNamespace">
             <ScaleID ID="BX" Factor="1.5"/> # Scale an individual ID, in this case + 50%
@@ -102,7 +103,6 @@
 			<RenameID ID="3to10" NewID="3-to-10"/> #fix naming error when collected
 		</Namespace>
 	</Source>
-    <!-- Remove comment block to show demo
 	-->
 	<MyComment> ## Namespace Manipulation ## </MyComment>
 	<!-- Remove comment block to show demo
