@@ -38,7 +38,7 @@ def getChildNodes(baseNode,childName):
     return retList
 
 # Will scale a given value - must be numeric
-def ScaleValue(entry,scaleVal):
+def ScaleValue(entry,scaleVal,Precision):
     try:
         fVal = float(entry.Value)
         scaleVal = float(scaleVal)
@@ -47,7 +47,11 @@ def ScaleValue(entry,scaleVal):
         return
 
     fVal *= scaleVal
+    if None != Precision:
+        fVal = format( fVal,'.' + str(Precision) + 'f')
+
     entry.Value = str(fVal)
+        
 
 # if the value is outside of the min/max passed, set it to the min/max value
 def BoundValue(entry,min,max):
@@ -425,7 +429,16 @@ class FileHandler(object):
         if not self.existsID(namespace,idLow):
             Log.getLogger().error("Invalid <Namespace> - Scale - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
             raise pickle.UnpicklingError()
-        
+
+        if "Precision" in node.attributes:
+            try:
+                Precision = int(node.attributes["Precision"].nodeValue)
+            except Exception as Ex:
+                Log.getLogger().error("Invalid <Namespace> - Scale Precision - invalid value: " + node.attributes["Precision"])
+                raise pickle.UnpicklingError()
+        else:
+            Precision = None
+                
         try:
             factorVal = float(node.attributes["Factor"].nodeValue)
         except Exception as Ex:
@@ -438,7 +451,7 @@ class FileHandler(object):
             if isinstance(entryObj,MarvinGroupData.MarvinDataGroup):
                 for entry in entryObj._DataList:
                     if entry.ID.lower() == idLow:
-                        ScaleValue(entry,factorVal)
+                        ScaleValue(entry,factorVal,Precision)
                         scaleCount += 1
 
             elif entryObj.ID.lower() == idLow:
@@ -483,6 +496,20 @@ class FileHandler(object):
 
         return boundCount
 
+    def __InsertHelper(self,namespace,newEntry):
+        Found = False
+        for index,entry in enumerate(self._namespaceMap[namespace]):
+            if newEntry.ArrivalTime <= entry.ArrivalTime:
+                Found = True
+                break
+
+        if Found:
+            self._namespaceMap[namespace].insert(index,newEntry)
+            return index
+
+        return None
+
+
     # insert a datapoint into a namesapce
     def InsertDatapoint(self,namespace,node):
         if not "ID" in node.attributes:
@@ -497,23 +524,37 @@ class FileHandler(object):
             Log.getLogger().error("Invalid <Namespace> - Insert - no Time specified.")
             raise pickle.UnpicklingError()
 
+        if "Interval" in node.attributes:
+            try:
+                Interval = int(node.attributes["Interval"].nodeValue)
+            except:
+                Log.getLogger().error("Invalid <Namespace> - Insert - invalid Interval specified:" + node.attributes['Interval'].nodeValue)
+                raise pickle.UnpicklingError()
+        else:
+            Interval = None
+
         try:
             insertTime = int(node.attributes['Time'].nodeValue)
         except:
             Log.getLogger().error("Invalid <Namespace> - Insert - invalid Time specified:" + node.attributes['Time'].nodeValue)
             raise pickle.UnpicklingError()
 
-        newObj = MarvinData.MarvinData(namespace,node.attributes['ID'].nodeValue,node.attributes['Value'].nodeValue,insertTime,'1.0',False)
+        if None == Interval:
+            newObj = MarvinData.MarvinData(namespace,node.attributes['ID'].nodeValue,node.attributes['Value'].nodeValue,insertTime,'1.0',False)
+            return self.__InsertHelper(namespace,newObj)
+        else:
+            retVal = True
+            insertCount = 0
+            while None != retVal:
+                newObj = MarvinData.MarvinData(namespace,node.attributes['ID'].nodeValue,node.attributes['Value'].nodeValue,insertTime,'1.0',False)
+                retVal = self.__InsertHelper(namespace,newObj)
+                insertTime += Interval
+                insertCount += 1
 
-        index = 0
-        for entry in self._namespaceMap[namespace]:
-            if insertTime <= entry.ArrivalTime:
-                break
-            index += 1
+        return insertCount
 
-        self._namespaceMap[namespace].insert(index,newObj)
-        
-        return index    
+
+
 
     # finds all unique IDs in a namesapce, and then at beginning of the namespace inserts a defined value
     def InitializeAll(self,namespace,node):
