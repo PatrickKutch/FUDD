@@ -109,7 +109,7 @@ class FileHandler(object):
     def __init__(self,baseNode):
         self._sourceFile = baseNode.attributes["File"].nodeValue
         Log.getLogger().info("Processing " + self._sourceFile)
-        with open(self._sourceFile,'r+b') as fp:
+        with open(self._sourceFile,'rb') as fp:
             try:
                 self._entries = pickle.load(fp)
                 
