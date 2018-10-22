@@ -96,6 +96,7 @@
             <ScaleID ID="BX" Factor="1.5"/> # Scale an individual ID, in this case + 50%
             <ScaleID ID="TX" Factor="1.2" Precision="1"/> # Scale an individual ID, also optional Precision
             <BoundID ID="cpu" Max="99.2" Min="22.1"/>
+            <AddValue ID="RX" Value="-22.3"/>           # Add or Subtract Value
             <InsertID ID="MyData" Value="Hi Mom" Time="1000"/>
             <InsertID ID="MyData" Value="Bye Mom" Time="4000"/>
             <InsertID ID="DataAtInterval" Value="Pulse" Time="10" Interval="500"/> # insert data, repeat at an interval
@@ -104,7 +105,8 @@
 		</Namespace>
 	</Source>
 	-->
-	<MyComment> ## Namespace Manipulation ## </MyComment>
+
+    <MyComment> ## Namespace Manipulation ## </MyComment>
 	<!-- Remove comment block to show demo
 	<Source File="Demonstration\AnotherSaveFile.biff">
 		<Namespace Name="vnf13">

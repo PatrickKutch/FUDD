@@ -87,8 +87,8 @@ def BoundValue(entry,min,max):
             Log.getLogger().error("Invalid <Namespace> - Max BoundID value of " + max +" is invalid.")
             raise pickle.UnpicklingError()
 
-
     return retVal
+
 
 ## helper routine, combines list 1 and list 2, sorted by Arrival Time
 def mergeLists(srcList,listToMerge):
@@ -496,6 +496,43 @@ class FileHandler(object):
 
         return boundCount
 
+    # worker to bound and ID in a namespace
+    def AddValueToID(self,namespace,node):
+        if not "ID" in node.attributes:
+            Log.getLogger().error("Invalid <Namespace> - AddValue - no ID specified.")
+            raise pickle.UnpicklingError()
+
+        idLow = node.attributes["ID"].nodeValue.lower()
+
+        if not self.existsID(namespace,idLow):
+            Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
+            raise pickle.UnpicklingError()
+        
+        if "Value" in node.attributes:
+            try:
+                valueToAdd = float(node.attributes['Value'].nodeValue)
+            except:
+                Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " has invalid Value: " + node.attributes['Value'].nodeValue)
+                raise pickle.UnpicklingError()
+        else:
+           Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " has no Value.")
+           raise pickle.UnpicklingError()
+
+        changedCount=0
+
+        for entryObj in self._namespaceMap[namespace]:
+            if isinstance(entryObj,MarvinGroupData.MarvinDataGroup):
+                for entry in entryObj._DataList:
+                    if entry.ID.lower() == idLow:
+                        try:
+                            entry.Value = str(valueToAdd + float(entry.Value))
+                            changedCount += 1
+                        except:
+                            Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " is not a numberic data point.")
+                            raise pickle.UnpicklingError()
+
+        return changedCount
+
     def __InsertHelper(self,namespace,newEntry):
         Found = False
         for index,entry in enumerate(self._namespaceMap[namespace]):
@@ -715,6 +752,9 @@ class FileHandler(object):
             
             elif nodeName == "BoundID":
                 self.BoundID(namespace,childNode)
+
+            elif nodeName == "AddValue":
+                self.AddValueToID(namespace,childNode)
 
             elif nodeName == "InsertID":
                 self.InsertDatapoint(namespace,childNode)
