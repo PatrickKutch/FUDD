@@ -528,8 +528,16 @@ class FileHandler(object):
                             entry.Value = str(valueToAdd + float(entry.Value))
                             changedCount += 1
                         except:
-                            Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " is not a numberic data point.")
+                            Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " is not a numeric data point.")
                             raise pickle.UnpicklingError()
+
+            elif entryObj.ID.lower() == idLow:
+                try:
+                    entryObj.Value = str(valueToAdd + float(entryObj.Value))
+                    changedCount += 1
+                except:
+                    Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " is not a numeric data point.")
+                    raise pickle.UnpicklingError()
 
         return changedCount
 
@@ -772,7 +780,7 @@ class FileHandler(object):
                 Log.getLogger().error("Invalid Namespace Option <" + nodeName +">.")
                 raise pickle.UnpicklingError()
 
-    # retuns the final list of all the namespaces for this file after all the manipulations
+    # returns the final list of all the namespaces for this file after all the manipulations
     def createMergedList(self,offsetTime=0):
         resultList=None
         for namespace in self._namespaceMap:
