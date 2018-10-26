@@ -438,7 +438,6 @@ class FileHandler(object):
                 raise pickle.UnpicklingError()
         else:
             Precision = None
-                
         try:
             factorVal = float(node.attributes["Factor"].nodeValue)
         except Exception as Ex:
@@ -455,7 +454,7 @@ class FileHandler(object):
                         scaleCount += 1
 
             elif entryObj.ID.lower() == idLow:
-                ScaleValue(entryObj,factorVal)
+                ScaleValue(entryObj,factorVal,Precision)
                 scaleCount += 1
 
         return scaleCount
@@ -502,6 +501,7 @@ class FileHandler(object):
             Log.getLogger().error("Invalid <Namespace> - AddValue - no ID specified.")
             raise pickle.UnpicklingError()
 
+        id = node.attributes["ID"].nodeValue
         idLow = node.attributes["ID"].nodeValue.lower()
 
         if not self.existsID(namespace,idLow):
@@ -511,7 +511,12 @@ class FileHandler(object):
         if "Value" in node.attributes:
             try:
                 valueToAdd = float(node.attributes['Value'].nodeValue)
-            except:
+                parts = node.attributes['Value'].nodeValue.split(".")
+                valuePrecision = 0
+                if len(parts) > 1:
+                  valuePrecision = len(parts[1])
+                
+            except Exception as Ex:
                 Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " has invalid Value: " + node.attributes['Value'].nodeValue)
                 raise pickle.UnpicklingError()
         else:
@@ -525,19 +530,42 @@ class FileHandler(object):
                 for entry in entryObj._DataList:
                     if entry.ID.lower() == idLow:
                         try:
-                            entry.Value = str(valueToAdd + float(entry.Value))
-                            changedCount += 1
+                           fValue = float(entry.Value)
+                           parts = entry.Value.split(".")
+                           dataPtPrecision = 0
+                           if len(parts) > 1:
+                              dataPtPrecision = len(parts[1])
+                              
+                           if valuePrecision > dataPtPrecision:
+                              dataPtPrecision = valuePrecision
+                              
+                           entry.Value = str(round(valueToAdd + fValue,dataPtPrecision))
+                           changedCount += 1
                         except:
-                            Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " is not a numeric data point.")
-                            raise pickle.UnpicklingError()
+                           Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " is not a numberic data point.")
+                           raise pickle.UnpicklingError()
+
 
             elif entryObj.ID.lower() == idLow:
                 try:
-                    entryObj.Value = str(valueToAdd + float(entryObj.Value))
+                    fValue = float(entryObj.Value)
+                    parts = entryObj.Value.split(".")
+                    dataPtPrecision = 0
+                    if len(parts) > 1:
+                        dataPtPrecision = len(parts[1])
+                        
+                    if valuePrecision > dataPtPrecision:
+                     dataPtPrecision = valuePrecision
+                    
+                    entryObj.Value = str(round(valueToAdd + fValue,dataPtPrecision))
+                    if len(entryObj.Value) > 6:
+                        print(entryObj.Value)
                     changedCount += 1
-                except:
+                except Exception as Ex:
                     Log.getLogger().error("Invalid <Namespace> - AddValue - ID: " + node.attributes["ID"].nodeValue + " is not a numeric data point.")
                     raise pickle.UnpicklingError()
+
+        Log.getLogger().info("Added Value of {0} to {1} instances of {2}".format(valueToAdd,changedCount,id))
 
         return changedCount
 
@@ -780,7 +808,7 @@ class FileHandler(object):
                 Log.getLogger().error("Invalid Namespace Option <" + nodeName +">.")
                 raise pickle.UnpicklingError()
 
-    # returns the final list of all the namespaces for this file after all the manipulations
+    # retuns the final list of all the namespaces for this file after all the manipulations
     def createMergedList(self,offsetTime=0):
         resultList=None
         for namespace in self._namespaceMap:
