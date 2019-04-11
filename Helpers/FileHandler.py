@@ -22,11 +22,16 @@ import logging
 import xml.dom.minidom
 import pickle
 import copy
+import fnmatch
 from  pprint import pprint
 
 from Helpers import Log
 from Data import MarvinGroupData
 from Data import MarvinData
+
+
+def Matches(name,pattern):
+    return fnmatch.fnmatch(name.upper(),pattern.upper())
 
 # Just a helper in parsing XML, sends just the child nodes that match
 def getChildNodes(baseNode,childName):
@@ -328,7 +333,7 @@ class FileHandler(object):
             if isinstance(entry,MarvinGroupData.MarvinDataGroup):
                 subList=[]
                 for subEntry in entry._DataList:
-                    if not subEntry.ID.upper() == id.upper():
+                    if Matches(subEntry,id):
                         subList.append(subEntry)
                     else:
                         removedCount += 1
@@ -339,7 +344,7 @@ class FileHandler(object):
                 newList.append(entry)
 
             else:
-                if not entry.ID.upper() == id.upper():
+                if not Matches(entry.ID,id):
                     newList.append(entry)
                 else:
                     removedCount += 1
@@ -349,7 +354,7 @@ class FileHandler(object):
 
         else:
             Log.getLogger().error("<Namespace> Delete ID failed - no ID " + id + " not found.")
-            raise pickle.UnpicklingError()
+            #raise pickle.UnpicklingError()
 
 
         Log.getLogger().info("Removed " + str(removedCount) + " instances of ID: " + id)
@@ -370,6 +375,11 @@ class FileHandler(object):
             raise pickle.UnpicklingError()
 
         newList=list(self._namespaceMap[namespace])
+        l = len(newList)
+        if len(newList) < 1:
+            Log.getLogger().info("Asked to trim Namespace: " + namespace + ", however it is empty.  Skipping")
+            return
+
         if self.insertTime == None or self.insertTime == 'Append':
             offset = 0 # need to account for 'insert time' 
         else:
@@ -384,6 +394,7 @@ class FileHandler(object):
                     break
 
         startIndex = index
+        lastTime = newList[-1].ArrivalTime
         if trimEnd > newList[-1].ArrivalTime:
             Log.getLogger().info("<Namespace> Trim - EndTime > stream.  Ignoring.")
 
@@ -396,7 +407,10 @@ class FileHandler(object):
                     break
 
         endIndex = index
-        self._namespaceMap[namespace] = self._namespaceMap[namespace][startIndex:endIndex]
+        try:
+            self._namespaceMap[namespace] = self._namespaceMap[namespace][startIndex:endIndex]
+        except:
+            Log.getLogger().error("Can't trim Namespace: " + namespace + " to specified range, outside of bounds")
 
 
     # takes a 2nd namespace, renames it to the 1st namespace and returns one list with both contents
@@ -745,8 +759,17 @@ class FileHandler(object):
     # gets all the differnt options specified for a given namespace internal manipulation and performs them  
     def ProcessNamespaceManipulation(self,baseNode,namespace):
         if not namespace in self._namespaceMap:
-            Log.getLogger().error("Invalid <Namespace> - Name: " + namespace + " does not exist.")
-            raise pickle.UnpicklingError()
+            matched=False
+            for ns in self._namespaceMap:
+                if Matches(ns,namespace):
+                    self.ProcessNamespaceManipulation(baseNode,ns)
+                    matched = True
+
+            if not matched:
+                Log.getLogger().error("Invalid <Namespace> - Name: " + namespace + " does not exist.")
+                raise pickle.UnpicklingError()
+            else:
+                return
 
         Log.getLogger().info("Processing Namespace: " + namespace)
 
