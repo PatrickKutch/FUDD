@@ -300,8 +300,12 @@ class FileHandler(object):
             else:
                 entry.Namespace = newName
 
-        self._namespaceMap[newName] = self._namespaceMap[origName]
-        del self._namespaceMap[origName]
+
+        #self._namespaceMap[newName] = self._namespaceMap.pop(origName)
+
+        Log.getLogger().info("Renamed Namespace {} to {}".format(origName,newName))
+        #self._namespaceMap[newName] = self._namespaceMap[origName]
+        #del self._namespaceMap[origName]
 
     # makes a copy of a given namespace, with another name - is a copy not a rename
     def DuplicateNamespace(self,origName,newName):
@@ -479,11 +483,11 @@ class FileHandler(object):
             Log.getLogger().error("Invalid <Namespace> - Bound - no ID specified.")
             raise pickle.UnpicklingError()
 
-        idLow = node.attributes["ID"].nodeValue.lower()
+        id = node.attributes["ID"].nodeValue
 
-        if not self.existsID(namespace,idLow):
-            Log.getLogger().error("Invalid <Namespace> - Bound - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
-            raise pickle.UnpicklingError()
+        # if not self.existsID(namespace,idLow):
+        #     Log.getLogger().error("Invalid <Namespace> - Bound - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
+        #     raise pickle.UnpicklingError()
         
         max=None
         min=None
@@ -499,14 +503,16 @@ class FileHandler(object):
         for entryObj in self._namespaceMap[namespace]:
             if isinstance(entryObj,MarvinGroupData.MarvinDataGroup):
                 for entry in entryObj._DataList:
-                    if entry.ID.lower() == idLow:
+                    if Matches(entryObj.ID,id):
                         if BoundValue(entry,min,max):
                             boundCount += 1
 
-            elif entryObj.ID.lower() == idLow:
+            elif Matches(entryObj.ID,id):
+                oldVAl = entryObj.Value
                 if BoundValue(entryObj,min,max):
                     boundCount += 1
 
+        Log.getLogger().info("Bound {} entries".format(boundCount))
         return boundCount
 
     # worker to bound and ID in a namespace
@@ -772,14 +778,16 @@ class FileHandler(object):
                 return
 
         Log.getLogger().info("Processing Namespace: " + namespace)
-
+        first = True
         for childNode in baseNode.childNodes:
             nodeName = childNode.nodeName
             if nodeName == "#text" or nodeName == '#comment':
                 continue
             
             if nodeName == "RenameNS":
-                self.RenameNamespace(namespace,childNode.firstChild.nodeValue)
+                if True == first:
+                    self.RenameNamespace(namespace,childNode.firstChild.nodeValue)
+                    first = False
 
             elif nodeName == "DuplicateNS":
                 self.DuplicateNamespace(namespace,childNode.firstChild.nodeValue)
