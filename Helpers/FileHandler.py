@@ -444,9 +444,9 @@ class FileHandler(object):
 
         idLow = node.attributes["ID"].nodeValue.lower()
 
-        if not self.existsID(namespace,idLow):
-            Log.getLogger().error("Invalid <Namespace> - Scale - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
-            raise pickle.UnpicklingError()
+        # if not self.existsID(namespace,idLow):
+        #     Log.getLogger().error("Invalid <Namespace> - Scale - ID: " + node.attributes["ID"].nodeValue + " does not exist.")
+        #     raise pickle.UnpicklingError()
 
         if "Precision" in node.attributes:
             try:
@@ -467,11 +467,11 @@ class FileHandler(object):
         for entryObj in self._namespaceMap[namespace]:
             if isinstance(entryObj,MarvinGroupData.MarvinDataGroup):
                 for entry in entryObj._DataList:
-                    if entry.ID.lower() == idLow:
+                    if Matches(entry.ID,idLow):
                         ScaleValue(entry,factorVal,Precision)
                         scaleCount += 1
 
-            elif entryObj.ID.lower() == idLow:
+            elif Matches(entryObj.ID,idLow):
                 ScaleValue(entryObj,factorVal,Precision)
                 scaleCount += 1
 
@@ -815,7 +815,8 @@ class FileHandler(object):
                 self.TrimNamespace(namespace,trimStart,trimEnd)
 
             elif nodeName == "ScaleID":
-                self.ScaleID(namespace,childNode)
+                count = self.ScaleID(namespace,childNode)
+                Log.getLogger().info("Scaled {} entries for namespace {}".format(count,namespace))
             
             elif nodeName == "BoundID":
                 self.BoundID(namespace,childNode)
