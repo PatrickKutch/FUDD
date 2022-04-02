@@ -157,8 +157,8 @@ class FileHandler(object):
             if namespace in self._namespaceMap:
                 del(self._namespaceMap[namespace])
             else:
-                Log.getLogger().error("Invalid <RemoveNamespace> namespace: " + namespace + " does not exist")
-                raise pickle.UnpicklingError()
+                Log.getLogger().info("xxxInvalid <RemoveNamespace> namespace: " + namespace + " does not exist")
+                #raise pickle.UnpicklingError()
 
     ## goes through the valid actions to perform on entire file, like when to insert, trim, etc.
     def ProcessFileActions(self,baseNode):
@@ -772,10 +772,10 @@ class FileHandler(object):
                     matched = True
 
             if not matched:
-                Log.getLogger().error("Invalid <Namespace> - Name: " + namespace + " does not exist.")
-                raise pickle.UnpicklingError()
-            else:
-                return
+                Log.getLogger().info("...Invalid <Namespace> - Name: " + namespace + " does not exist.")
+                #raise pickle.UnpicklingError()
+
+            return
 
         Log.getLogger().info("Processing Namespace: " + namespace)
         first = True
