@@ -1,5 +1,5 @@
 ##############################################################################
-#  Copyright (c) 2017 Patrick Kutch
+#  Copyright (c) 2022 Patrick Kutch
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -110,6 +110,8 @@ def deleteNamespace(args):
     totalDeleted=0
     fCount=0
 
+    print(inpFiles)
+
     for inpName in inpFiles:
         fHandler = Actions.FileHandler(inpName)
         deletedFromFileCount = 0
@@ -146,6 +148,46 @@ def deleteId(args):
             fCount +=1
 
     Log.getLogger().info("Deleted {} datapoints  from {} files".format(totalDeleted,fCount))
+
+def boundId(args):
+    inpFiles =  glob.glob(g_args.input)
+    totalModified=0
+    fCount=0
+
+    for inpName in inpFiles:
+        fHandler = Actions.FileHandler(inpName)
+        modifiedFromFileCount = 0
+        for namespace in args.namespace:
+            modifiedFromFileCount = fHandler.Bound_Id(namespace,args.id,args.max,args.min)
+
+        targetFn = GetTargetFileName(inpName,g_args.output)
+        fHandler.writeFile(targetFn,g_args.overwrite)
+        Log.getLogger().info("{} datapoints bound from {}".format(modifiedFromFileCount,inpName))
+        totalModified+=modifiedFromFileCount
+        if modifiedFromFileCount > 0:
+            fCount +=1
+
+    Log.getLogger().info("bound {} datapoints  from {} files".format(totalModified,fCount))    
+
+def deltaId(args):
+    inpFiles =  glob.glob(g_args.input)
+    totalModified=0
+    fCount=0
+
+    for inpName in inpFiles:
+        fHandler = Actions.FileHandler(inpName)
+        modifiedFromFileCount = 0
+        for namespace in args.namespace:
+            modifiedFromFileCount = fHandler.ApplyDelta_Id(namespace,args.id,args.delta)
+
+        targetFn = GetTargetFileName(inpName,g_args.output)
+        fHandler.writeFile(targetFn,g_args.overwrite)
+        Log.getLogger().info("{} datapoints delta's from {}".format(modifiedFromFileCount,inpName))
+        totalModified+=modifiedFromFileCount
+        if modifiedFromFileCount > 0:
+            fCount +=1
+
+    Log.getLogger().info("delta'd {} datapoints  from {} files".format(totalModified,fCount))    
 
 def renameNamespace(args):
     inpFiles =  glob.glob(g_args.input)
@@ -299,6 +341,31 @@ def SetupActions():
     AddActionParserToList(actionCopyList,"id",parser,copyId)
 
     AddActionParserToList(actionList,"copy",actionCopyList)
+
+    ### BOUND ###
+
+    actionBoundList=[]
+    parser = argparse.ArgumentParser(description='bound id',add_help=True,usage='''bound -n namespace -id id --max maxVal --min --minVal
+      wildcard allowed for namespace and id''')
+    parser.add_argument("-n","--namespace",type=str,required=True,nargs="+")
+    parser.add_argument("--id",type=str,required=True,nargs="+")
+    parser.add_argument("--max",type=float)
+    parser.add_argument("--min",type=float)
+    AddActionParserToList(actionBoundList,"id",parser,boundId)
+
+    AddActionParserToList(actionList,"bound",actionBoundList)
+
+    ### DELTA ###
+
+    actionBoundList=[]
+    parser = argparse.ArgumentParser(description='delta id',add_help=True,usage='''delta -n namespace -id id --delta
+      wildcard allowed for namespace and id''')
+    parser.add_argument("-n","--namespace",type=str,required=True,nargs="+")
+    parser.add_argument("--id",type=str,required=True,nargs="+")
+    parser.add_argument("--delta",type=float)
+    AddActionParserToList(actionBoundList,"id",parser,deltaId)
+
+    AddActionParserToList(actionList,"delta",actionBoundList)
 
 
     return foo.getActionStrings(), foo

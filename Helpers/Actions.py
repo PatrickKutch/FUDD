@@ -26,6 +26,66 @@ def mergeLists(srcList,listToMerge):
 
     return mergedList
 
+def BoundValue(entry,min,max):
+    retVal = False
+    if None == min and None == max:
+        Log.getLogger().error("Invalid <Namespace> - BoundID without Min or Max value specified.")
+        raise pickle.UnpicklingError()
+
+    try:
+        float(entry.Value)
+    except:
+        Log.getLogger().info("Invalid <Namespace> - BoundID tried to bound non numeric data point, ID="+entry.ID)
+        return
+
+    #entry.Value = "{:.2f}".format(float(entry.Value))
+    #entry.Value = float(entry.Value)
+
+    if None != min:
+        try:
+            min = float(min)
+            if float(entry.Value) < min:
+                #entry.Value = "{:.2f}".format(min)
+                entry.Value = str(min)
+                retVal = True
+        except:
+            Log.getLogger().error("Invalid <Namespace> - Min BoundID value of " + min +" is invalid.")
+            raise pickle.UnpicklingError()
+
+    if None != max:
+        try:
+            max = float(max)
+            if float(entry.Value) > max:
+                #entry.Value = "{:.2f}".format(max)
+                entry.Value = str(max)
+                retVal = True
+        except:
+            Log.getLogger().error("Invalid <Namespace> - Max BoundID value of " + max +" is invalid.")
+            raise pickle.UnpicklingError()
+
+    return retVal
+
+def DeltaValue(entry,delta):
+    retVal = False
+    try:
+        float(entry.Value)
+    except:
+        Log.getLogger().info("Invalid <Namespace> - BoundID tried to bound non numeric data point, ID="+entry.ID)
+        return
+
+
+    if None != delta:
+        try:
+            delta = float(delta)
+            entry.Value = str(float(entry.Value) + delta)
+            retVal = True
+        except:
+            Log.getLogger().error("Invalid <Namespace> - delta  value of " + delta +" is invalid.")
+            raise pickle.UnpicklingError()
+
+    return retVal    
+
+
 class FileHandler(object):
     def __init__(self,inpFname):
         self._sourceFile = inpFname
@@ -129,7 +189,6 @@ class FileHandler(object):
             for namespace in namespaces:
                 del(self._namespaceMap[namespace])
                 Log.getLogger().info("Namespace: {} has been deleted".format(namespace))
-
 
         else:
             Log.getLogger().error("Cannot delete namespace: {} - it does not exist".format(namespaceName))
@@ -274,3 +333,56 @@ class FileHandler(object):
                 self._namespaceMap[NewNS] = temporaryNS
                 
         return changedCount
+
+
+    def Bound_Id(self,namespaceName,ids,maxValue,minValue):
+        namespaces = self.getMatchingNamespacesNameList(namespaceName)
+        
+        totalModifiedCount = 0
+        if not isinstance(ids,list):
+            ids = [ids]
+
+        if len(namespaces) > 0:
+            for namespace in namespaces:
+                for searchId in ids:
+                    for entry in self._namespaceMap[namespace]:
+                        if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                            for subEntry in entry._DataList:
+                                if Matches(subEntry.ID,searchId):
+                                    if BoundValue(subEntry,minValue,maxValue):
+                                       totalModifiedCount += 1 
+
+                        elif Matches(entry.ID.lower(),searchId):
+                            if BoundValue(entry,minValue,maxValue):
+                                totalModifiedCount += 1 
+
+        else:
+            Log.getLogger().error("Namespace: {} does not exist".format(namespaceName))
+
+        return totalModifiedCount
+
+    def ApplyDelta_Id(self,namespaceName,ids,deltaVal):
+        namespaces = self.getMatchingNamespacesNameList(namespaceName)
+        
+        totalModifiedCount = 0
+        if not isinstance(ids,list):
+            ids = [ids]
+
+        if len(namespaces) > 0:
+            for namespace in namespaces:
+                for searchId in ids:
+                    for entry in self._namespaceMap[namespace]:
+                        if isinstance(entry,MarvinGroupData.MarvinDataGroup):
+                            for subEntry in entry._DataList:
+                                if Matches(subEntry.ID,searchId):
+                                    if DeltaValue(subEntry,deltaVal):
+                                       totalModifiedCount += 1 
+
+                        elif Matches(entry.ID.lower(),searchId):
+                            if DeltaValue(entry,deltaVal):
+                                totalModifiedCount += 1 
+
+        else:
+            Log.getLogger().error("Namespace: {} does not exist".format(namespaceName))
+
+        return totalModifiedCount  
